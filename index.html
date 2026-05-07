@@ -12,9 +12,10 @@
   --gold:#c89b3c;
   --text:#1f1a14;
   --muted:#7a6d5f;
+  --danger:#b3261e;
 }
 
-body {
+body{
   margin:0;
   padding:20px;
   background:var(--bg);
@@ -22,24 +23,11 @@ body {
   color:var(--text);
 }
 
-.hero {
-  text-align:center;
-  margin-bottom:20px;
-}
+.hero{text-align:center;margin-bottom:20px;}
+.hero h1{margin:0;font-size:38px;}
+.subtitle{margin-top:8px;color:var(--muted);font-style:italic;font-weight:600;}
 
-.hero h1 {
-  margin:0;
-  font-size:38px;
-}
-
-.subtitle {
-  margin-top:8px;
-  color:var(--muted);
-  font-style:italic;
-  font-weight:600;
-}
-
-.card {
+.card{
   background:var(--card);
   border-radius:22px;
   padding:18px;
@@ -47,11 +35,9 @@ body {
   box-shadow:0 4px 12px rgba(0,0,0,.08);
 }
 
-h2 {
-  margin-top:0;
-}
+h2{margin-top:0;}
 
-select,button {
+select,button{
   width:100%;
   padding:14px;
   border-radius:14px;
@@ -61,35 +47,38 @@ select,button {
   box-sizing:border-box;
 }
 
-button {
+button{
   background:#111;
   color:white;
   font-weight:700;
 }
 
-table {
+button.danger{
+  background:var(--danger);
+}
+
+table{
   width:100%;
   border-collapse:collapse;
 }
 
-th,td {
+th,td{
   padding:12px 4px;
   border-bottom:1px solid #e5d7bf;
 }
 
-th:last-child,
-td:last-child {
+th:last-child,td:last-child{
   text-align:right;
   font-weight:700;
 }
 
-.podium {
+.podium{
   display:flex;
   justify-content:space-between;
   gap:10px;
 }
 
-.podium-box {
+.podium-box{
   flex:1;
   background:white;
   border-radius:18px;
@@ -97,11 +86,11 @@ td:last-child {
   padding:12px;
 }
 
-.first {
+.first{
   border:2px solid var(--gold);
 }
 
-.history-item {
+.history-item{
   padding:10px 0;
   border-bottom:1px solid #eadbc7;
 }
@@ -172,6 +161,7 @@ td:last-child {
 <div class="card">
 <h2>🕘 Storico condiviso</h2>
 <div id="history"></div>
+<button class="danger" onclick="undoLastAction()">↩️ Annulla ultima azione</button>
 </div>
 
 <script type="module">
@@ -181,11 +171,8 @@ import {
   doc,
   getDoc,
   setDoc,
-  updateDoc,
-  onSnapshot,
-  arrayUnion
+  onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
 
 const firebaseConfig = {
   apiKey: "AIzaSyA-xnVN8-TXM4fTEWxXn5mJoW65m-rZfrI",
@@ -196,7 +183,6 @@ const firebaseConfig = {
   appId: "1:58895076048:web:8c85520cec6b243a48acd5",
   measurementId: "G-DNFNP480LD"
 };
-
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -250,9 +236,12 @@ function render(data){
  </tr>
  `).join("");
 
- document.getElementById("history").innerHTML = history.slice().reverse().map(h=>`
- <div class="history-item">${h}</div>
- `).join("");
+ document.getElementById("history").innerHTML = history.slice().reverse().map(h=>{
+   if(typeof h === "string"){
+     return `<div class="history-item">${h}</div>`;
+   }
+   return `<div class="history-item">${h.player}: ${h.label} (+${h.points})</div>`;
+ }).join("");
 }
 
 window.addPoints = async function(){
@@ -265,8 +254,46 @@ window.addPoints = async function(){
  const snap = await getDoc(ref);
  const data = snap.data();
 
- data.players[player] += points;
- data.history.push(`${player}: ${label}`);
+ if(!data.players) data.players = {...initialPlayers};
+ if(!Array.isArray(data.history)) data.history = [];
+
+ data.players[player] = (data.players[player] || 0) + points;
+
+ data.history.push({
+   player,
+   points,
+   label,
+   createdAt: new Date().toLocaleString("it-IT")
+ });
+
+ await setDoc(ref, data);
+}
+
+window.undoLastAction = async function(){
+ const ok = confirm("Vuoi annullare l'ultima azione inserita?");
+ if(!ok) return;
+
+ const snap = await getDoc(ref);
+ const data = snap.data();
+
+ if(!data || !Array.isArray(data.history) || data.history.length === 0){
+   alert("Non ci sono azioni da annullare.");
+   return;
+ }
+
+ const last = data.history.pop();
+
+ if(typeof last === "string"){
+   alert("Questa azione è stata salvata con la vecchia versione e non posso annullarla automaticamente.");
+   await setDoc(ref, data);
+   return;
+ }
+
+ data.players[last.player] = (data.players[last.player] || 0) - last.points;
+
+ if(data.players[last.player] < 0){
+   data.players[last.player] = 0;
+ }
 
  await setDoc(ref, data);
 }
